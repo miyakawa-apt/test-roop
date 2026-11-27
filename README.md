@@ -313,7 +313,7 @@ result.typesOf('quantity')  // ['INVALID_FORMAT']
 | S06 実績照会 | `/results` | 仮ページ | 管理者・一般 |
 | S07 在庫修正 | `/stock-edit` | 仮ページ | 管理者のみ |
 | S08 商品メンテナンス | `/product-admin` | 商品マスタの登録・更新・削除（下記「商品メンテナンス」） | 管理者のみ |
-| S09 ロケーションメンテ | `/location-admin` | 仮ページ | 管理者のみ |
+| S09 ロケーションメンテ | `/location-admin` | 棚の登録・更新・削除（下記「ロケーションメンテナンス」） | 管理者のみ |
 | S10 ユーザー管理 | `/user-admin` | 仮ページ | 管理者のみ |
 
 全画面の上に共通ヘッダー（ログイン者「A001（管理者）」または「未ログイン」と、現在日時 `yyyy年MM月dd日 HH:mm:ss`。1秒ごとに更新）を出します。画面の定義は `frontend/src/screens.ts` です。
@@ -431,3 +431,48 @@ import MasterLayout from './components/MasterLayout'
 
 DB なしで、`ProductControllerTest`（WebMvcTest：一覧・登録・重複409・更新・404・在庫あり409・削除・検証400・一般403・未ログイン401）、`ProductServiceTest`、`LabelConverterTest` が動きます。環境変数 `SPRING_DATASOURCE_PASSWORD` があるときだけ `ProductIntegrationTest`（実DB。登録〜削除、在庫あり削除409、実績履歴だけ残る商品の削除、権限、途中失敗でのロールバック）が実行され、各テストの前後でテスト用データを削除します。画面は `pages/ProductAdmin.test.tsx`（Vitest、fetch をモック）です。
 
+## ロケーションメンテナンス（FR-08・S09）
+
+管理者だけが使える、棚（ロケーション）マスタの登録・更新・削除です。商品メンテナンスと同じ作り（`jp.co.apt.mony.location`、`pages/LocationAdmin.tsx`、`api/locations.ts`）です。
+
+### API
+
+| メソッドとパス | 内容 | 成功時 |
+| --- | --- | --- |
+| `GET /api/admin/locations` | 一覧（棚番順） | 200 `[ {棚}, ... ]`（0件は `[]`） |
+| `POST /api/admin/locations` | 登録 | 201 `{棚}` |
+| `PUT /api/admin/locations/{shelfNo}` | 更新（パスが変更前の棚番、本文の `shelfNo` が新しい棚番） | 200 `{棚}`（新しい棚番） |
+| `DELETE /api/admin/locations/{shelfNo}` | 削除 | 204 |
+
+棚（応答）: `{ "shelfNo": "01-001-01", "shelfStatus": "EMPTY", "shelfStatusLabel": "空棚", "remarks": "入口側" }`（`shelfStatus` は定数名 `EMPTY` / `STOCKED` / `PROHIBITED`、`shelfStatusLabel` は表示名。備考が未入力なら空文字）。
+要求（POST／PUT）: `{ "shelfNo": "01-001-01", "shelfStatus": "EMPTY", "remarks": "入口側" }`。`remarks` は省略・空でも可（DB には `NULL` で保存）。`shelfStatus` に指定できるのは `EMPTY`（空棚）と `PROHIBITED`（禁止棚）だけです（例外: 更新で実棚の行を変えないとき、つまり備考だけの更新では `STOCKED` をそのまま送れます）。
+
+エラー:
+
+| 状況 | ステータス | 本文 |
+| --- | --- | --- |
+| 入力検証エラー（複数項目をまとめて返す。本文なしは `shelfNo`・`shelfStatus` が `REQUIRED`） | 400 | `{ "errors": [ { "field": "shelfNo", "type": "INVALID_FORMAT" }, ... ] }`（`field` は `shelfNo` / `shelfStatus` / `remarks`。棚番は `NN-NNN-NN`、備考は 0〜50 文字。棚状況が定数名でなければ `INVALID_FORMAT`、空なら `REQUIRED`。登録で `STOCKED`、実棚でない棚を `STOCKED` に更新するのも `INVALID_FORMAT`） |
+| 棚番が既に登録済み（POST、更新の棚番変更） | 409 | `{ "error": "DUPLICATE" }` |
+| 在庫がある棚の削除・棚番変更・禁止棚（空棚）への更新 | 409 | `{ "error": "HAS_STOCK" }` |
+| 更新・削除の対象がない（他の人に先に削除された など） | 404 | `{ "error": "NOT_FOUND" }` |
+
+登録・更新・削除はそれぞれ 1 トランザクションです。確認の直後に他の人が削除した場合に Hibernate が投げる楽観ロック系の例外（`ObjectOptimisticLockingFailureException` / `StaleStateException` など）は、404 `NOT_FOUND` に変換します。
+
+### 画面の使い方
+
+- 入力欄は 棚番（9文字）・棚状況・備考（50文字）、ボタンは 登録・更新・削除・クリア、一覧は 棚番・棚状況・備考で、右上に件数です。棚がなければ「該当する棚がありません。」を出します。
+- 一覧の行を選ぶと入力欄に表示されます。選択中は登録が押せず、選択していないと更新・削除は押せません。削除は「選択行があり、入力内容が選択行と完全に一致している」ときだけ押せます。
+- 棚状況の選択肢は「空棚」「禁止棚」だけです。実棚の行を選ぶと、棚番と棚状況は変更できず（表示のみ）、備考だけ更新できます。
+- 登録・更新・削除の前に確認ダイアログを出し、完了は緑のメッセージです。入力チェックは Enter キー（選択中は更新、なければ登録）とボタン押下のときだけで、エラーはまとめてエラーダイアログに出します。Enter キーは通信中（ボタンが無効の間）は無視します。
+- 409・404 の文言は `messages.ts`（`locationMessages`）にあります。「選択された棚は存在しません。」「その棚番は既に登録されています。別の棚番を入力してください。」「在庫のある棚は削除できません。」「在庫のある棚は棚番の変更・禁止棚への変更はできません。」。
+
+### 判断事項
+
+- 棚状況は DB に日本語（空棚・実棚・禁止棚）で保存し、`ShelfStatus` / `ShelfStatusConverter`（`common.code`）で変換します。登録・更新で選べるのは空棚と禁止棚だけで、実棚は在庫が入ったときにだけ変わります（入出庫は別イシュー。禁止棚には入出庫できない扱いもそちらで実装します）。
+- 棚番は主キーですが、更新で変更できます。在庫が無いことを確認したうえで主キーを更新します（`LocationRepository.renumber`）。在庫のある棚（実棚）は棚番を変更できず（409 `HAS_STOCK`）、新しい棚番が既にあれば 409 `DUPLICATE` です。DB の外部キー（`fk_stock_location`）にも守られ、確認の直後に入庫されて外部キー違反になった場合も `HAS_STOCK`、一意制約に当たった場合は `DUPLICATE` にします。
+- 在庫のある棚は禁止棚（空棚）へ更新できません（409 `HAS_STOCK`）。「在庫あり」は、実棚であるか、`stock` に行があることです。
+- 実棚（在庫あり）は削除できません（409 `HAS_STOCK`）。在庫がなく、空棚か禁止棚なら削除できます。強制削除はありません。
+
+### テスト
+
+DB なし: `LocationControllerTest`（WebMvcTest）、`LocationServiceTest`（楽観ロック例外の 404 変換を含む）。環境変数 `SPRING_DATASOURCE_PASSWORD` があるときだけ `LocationIntegrationTest`（実DB。棚番変更・在庫あり409・削除・権限・ロールバック）が実行され、テスト用の棚（`98-xxx-xx`）・商品（`90000501`）は各テストの前後で削除します。画面は `pages/LocationAdmin.test.tsx`（Vitest、fetch をモック）です。
