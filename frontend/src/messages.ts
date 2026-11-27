@@ -81,6 +81,23 @@ export const productMessages = {
   failed: '処理できませんでした。',
 } as const
 
+/** ロケーションメンテナンス画面（S09）のメッセージ。 */
+export const locationMessages = {
+  /** 更新・削除の対象が他の人に先に削除されていた（404）。 */
+  notFound: '選択された棚は存在しません。',
+  /** 棚番の重複（409 DUPLICATE）。 */
+  duplicate: 'その棚番は既に登録されています。別の棚番を入力してください。',
+  /** 在庫のある棚の削除（409 HAS_STOCK）。 */
+  hasStockDelete: '在庫のある棚は削除できません。',
+  /** 在庫のある棚の棚番変更・禁止棚への更新（409 HAS_STOCK）。 */
+  hasStockUpdate: '在庫のある棚は棚番の変更・禁止棚への変更はできません。',
+  loadFailed: '棚の一覧を取得できませんでした。',
+  failed: '処理できませんでした。',
+  /** 棚状況の検証エラー文（棚状況は選択式）。 */
+  shelfStatus: (type: string): string =>
+    type === 'REQUIRED' ? errorMessages.select('棚状況') : '棚状況の形式を確認して入力してください。',
+} as const
+
 /** ユーザー管理画面（S10）のメッセージ。 */
 export const userMessages = {
   /** 更新・削除の対象が他の人に先に削除されていた（404）。 */
