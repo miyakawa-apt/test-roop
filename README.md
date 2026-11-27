@@ -312,7 +312,7 @@ result.typesOf('quantity')  // ['INVALID_FORMAT']
 | S05 在庫リスト | `/stock-list` | 仮ページ | 管理者・一般 |
 | S06 実績照会 | `/results` | 仮ページ | 管理者・一般 |
 | S07 在庫修正 | `/stock-edit` | 仮ページ | 管理者のみ |
-| S08 商品メンテナンス | `/product-admin` | 仮ページ | 管理者のみ |
+| S08 商品メンテナンス | `/product-admin` | 商品マスタの登録・更新・削除（下記「商品メンテナンス」） | 管理者のみ |
 | S09 ロケーションメンテ | `/location-admin` | 仮ページ | 管理者のみ |
 | S10 ユーザー管理 | `/user-admin` | 仮ページ | 管理者のみ |
 
@@ -363,3 +363,71 @@ await apiSend('PUT', '/api/xxx/1', { ... })             // POST / PUT / DELETE
 ### 共通メッセージ（`messages.ts`）
 
 `validationMessage(項目名, エラー種別)` が検証結果から「〜してください。」形の文面を作ります（例: `userId` ＋ `REQUIRED` →「ユーザーIDを入力してください。」）。項目の表示名は `fieldLabels`、ログイン不一致の文言は `loginMessages.mismatch` です。
+
+## 商品メンテナンス（FR-07・S08）
+
+管理者だけが使える商品マスタの画面とAPIです。商品コード（8桁数字・重複不可）、商品名（1〜30文字）、カテゴリ（食品／日用品／工具／部材／その他）、単価（0〜9,999,999）、ケース入数（1〜9,999）を扱います。入力ルールは画面側とサーバー側で同じ（`InputRule` ／ `validation/`）です。
+
+### API（JSON。`/api/admin/**` のため管理者のみ。一般は 403、未ログインは 401。POST・PUT・DELETE は CSRF ヘッダー必須）
+
+| メソッド・パス | 内容 | 成功 |
+| --- | --- | --- |
+| `GET /api/admin/products` | 一覧（商品コード順） | 200 `[ {商品}, ... ]`（0件は `[]`） |
+| `POST /api/admin/products` | 登録 | 201 `{商品}` |
+| `PUT /api/admin/products/{code}` | 更新（商品コード以外） | 200 `{商品}` |
+| `DELETE /api/admin/products/{code}` | 削除 | 204 |
+
+商品（応答）: `{ "productCode": "00000001", "productName": "みかん", "category": "FOOD", "categoryLabel": "食品", "unitPrice": 120, "caseQuantity": 24 }`（`category` は定数名、`categoryLabel` は表示名）。
+要求（POST／PUT）: `{ "productCode": "00000001", "productName": "みかん", "category": "FOOD", "unitPrice": "120", "caseQuantity": "24" }`。`unitPrice`・`caseQuantity` は文字列でも JSON の数値でも可。PUT では `productCode` を無視し、パスの商品コードを対象にします。
+
+エラー:
+
+| 状況 | ステータス | 本文 |
+| --- | --- | --- |
+| 入力検証エラー（複数項目をまとめて返す。本文なしは全項目 `REQUIRED`） | 400 | `{ "errors": [ { "field": "productName", "type": "REQUIRED" }, ... ] }`（`field` は `productCode` / `productName` / `category` / `unitPrice` / `caseQuantity`。カテゴリが定数名でなければ `category` の `INVALID_FORMAT`、空なら `REQUIRED`） |
+| 商品コードが既に登録済み（POST）／在庫がある商品の削除（DELETE） | 409 | `{ "error": "DUPLICATE" }` ／ `{ "error": "HAS_STOCK" }` |
+| 更新・削除の対象がない（他の人に先に削除された など） | 404 | `{ "error": "NOT_FOUND" }` |
+
+登録・更新・削除はそれぞれ 1 トランザクション（Spring Data JPA。途中で失敗すれば全体を元に戻します）です。
+
+### 画面の使い方
+
+- 上に入力欄（商品コード・商品名・カテゴリ・単価・ケース入数）とボタン（登録・更新・削除・クリア）、下に一覧、一覧の右上に件数です。商品がなければ「該当する商品がありません。」を出します。
+- 一覧の行を選ぶと入力欄に表示されます。選択中は商品コード欄を編集できず、登録は押せません（新しく登録するときは「クリア」）。選択していないと更新・削除は押せません。
+- 削除は「選択行があり、入力内容が選択行と完全に一致している」ときだけ押せます（入力を変えると無効になり、元に戻すと有効になります）。
+- 登録・更新・削除の前に確認ダイアログを出し、「はい」で実行します。完了は緑のメッセージ（7.5秒）で、一覧を読み直して入力を空にします。
+- 入力チェックは Enter キー（入力欄で。選択中は更新、なければ登録）とボタン押下のときだけで、フォーカスが外れても検証しません。エラーはエラーダイアログにまとめて表示します。
+- 更新・削除の対象が先に削除されていた（404）ときは「選択された商品は存在しません。」を出して一覧を読み直します。409 は「その商品コードは既に登録されています。別の商品コードを入力してください。」「在庫のある商品は削除できません。」です。文言は `messages.ts`（`productMessages`）にあります。
+
+### 判断事項
+
+- 商品コードは更新で変更できません（変えたいときは削除して登録し直します）。
+- 在庫（`stock`）がある商品は削除できません（409 `HAS_STOCK`）。実績（`work_result`）が残っているだけなら削除できます（実績は商品コードを文字列で持ち、外部キーがないため。履歴はそのまま残ります）。
+- 在庫の確認と削除は同じトランザクションで行い、確認後に入庫されて外部キー違反になった場合も 409 `HAS_STOCK` にします。同時登録で一意制約に当たった場合も 409 `DUPLICATE` です。
+- 登録・更新・削除のボタンの有効・無効は上記のとおり（登録は未選択のときだけ、更新・削除は選択中だけ）です。
+
+### 共通部品（ロケーション・ユーザーなど後続のマスタ画面で使い回せるもの）
+
+バックエンド:
+
+- `common.code.Labeled`（`label()`）と、各区分値 `Role` / `ShelfStatus` / `ResultType` / `Category` の `fromLabel("日本語表示名")`。
+- JPA コンバーター `RoleConverter` / `ShelfStatusConverter` / `ResultTypeConverter` / `CategoryConverter`（DB の日本語表示名 ⇔ enum。null は null、不正な値は `IllegalArgumentException`）。エンティティの項目に `@Convert(converter = CategoryConverter.class)` を付けて使う。新しい区分値は `LabelConverter<E>` を継承して同じ形で作れる。
+- `common.validation.ValidationFailedException(ValidationResult)` を投げると、`common.web.ValidationExceptionHandler` が 400 `{errors:[{field,type}]}` に変換する。
+- 参考実装は `jp.co.apt.mony.product`（`Product` エンティティ＝`Persistable`、`ProductRepository`、`ProductService`、`ProductController`、`ProductExceptionHandler`）。
+
+フロントエンド:
+
+```tsx
+import MasterLayout from './components/MasterLayout'
+
+<MasterLayout title="…（S08）" count={rows.length} form={<入力欄 />} buttons={<ボタン列 />}>
+  {rows.length === 0 ? <NotFound name="…" /> : <table>…</table>}
+</MasterLayout>
+```
+
+`MasterLayout` は 見出し → 入力欄 → ボタン列 → 件数（右上）→ 一覧 の配置だけを持ちます。`App.tsx` の `IMPLEMENTED_PAGES`（パス → 画面）に 1 行足すと、その画面が仮ページの代わりに出ます。API の呼び出しは `api/products.ts` が例です。
+
+### テスト
+
+DB なしで、`ProductControllerTest`（WebMvcTest：一覧・登録・重複409・更新・404・在庫あり409・削除・検証400・一般403・未ログイン401）、`ProductServiceTest`、`LabelConverterTest` が動きます。環境変数 `SPRING_DATASOURCE_PASSWORD` があるときだけ `ProductIntegrationTest`（実DB。登録〜削除、在庫あり削除409、実績履歴だけ残る商品の削除、権限、途中失敗でのロールバック）が実行され、各テストの前後でテスト用データを削除します。画面は `pages/ProductAdmin.test.tsx`（Vitest、fetch をモック）です。
+

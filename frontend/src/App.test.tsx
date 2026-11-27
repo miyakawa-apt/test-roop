@@ -179,7 +179,8 @@ describe('メニュー（S02）', () => {
     for (const s of allScreens) {
       fireEvent.click(screen.getByRole('button', { name: s.name }))
       expect(await screen.findByRole('heading', { name: `${s.name}（${s.code}）` })).toBeInTheDocument()
-      expect(screen.getByText('準備中です。')).toBeInTheDocument()
+      // 実装済みの画面（S08）は仮ページではない
+      if (s.code !== 'S08') expect(screen.getByText('準備中です。')).toBeInTheDocument()
       cleanup()
       installFakeServer(ADMIN_USER, ACCOUNTS)
       renderApp('/menu')
