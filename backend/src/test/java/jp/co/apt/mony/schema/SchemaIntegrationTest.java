@@ -90,7 +90,7 @@ class SchemaIntegrationTest {
 	void パスワード列はハッシュ値が入る長さ() {
 		String hash = "$2a$10$" + "x".repeat(53); // BCrypt は 60 文字
 		jdbc.update("INSERT INTO app_user VALUES ('ab12', 'テスト', ?, '管理者')", hash);
-		assertThat(jdbc.queryForObject("SELECT length(password_hash) FROM app_user", Integer.class)).isEqualTo(60);
+		assertThat(jdbc.queryForObject("SELECT length(password_hash) FROM app_user WHERE user_id = 'ab12'", Integer.class)).isEqualTo(60);
 	}
 
 	@Test
