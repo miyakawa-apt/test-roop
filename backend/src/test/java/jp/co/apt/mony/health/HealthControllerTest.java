@@ -12,6 +12,7 @@ import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
 import org.springframework.context.annotation.Import;
 import org.springframework.dao.DataAccessResourceFailureException;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
@@ -27,6 +28,10 @@ class HealthControllerTest {
 
 	@MockitoBean
 	JdbcTemplate jdbcTemplate;
+
+	/** SecurityConfig の認証管理が必要とするため差し替える（DB は使わない）。 */
+	@MockitoBean
+	UserDetailsService userDetailsService;
 
 	@Test
 	void DB接続できるとき200とUPを返す_認証なしで呼べる() throws Exception {

@@ -60,6 +60,7 @@ docker compose down
 | `SPRING_DATASOURCE_PASSWORD` | なし（バックエンド起動時は必須） | バックエンドのDBパスワード（Spring Boot 標準）。`MONY_DB_PASSWORD` と同じ値にする |
 | `MONY_DB_URL` | `jdbc:postgresql://localhost:5432/mony` | バックエンドのDB接続URL |
 | `MONY_SERVER_PORT` | `8080` | バックエンドの待受ポート |
+| `MONY_BOOTSTRAP_ADMIN_PASSWORD` | なし（任意） | 最初の管理者（ユーザーID `A001`）のパスワード（8〜14文字）。設定されていて `app_user` が 0 件のときだけ、起動時にハッシュ化して登録する（下記「ログインと権限制御」） |
 | `MONY_API_TARGET` | `http://localhost:8080` | フロント開発サーバーの `/api` 中継先 |
 
 バックエンドのDBユーザーも `MONY_DB_USER` で上書きできます。バックエンドのパスワードは `SPRING_DATASOURCE_PASSWORD` に Compose の `MONY_DB_PASSWORD` と同じ値を必ず設定してください（未設定だとバックエンドは起動しません。ビルド・テストには不要です）。
@@ -68,7 +69,7 @@ docker compose down
 ### 補足
 
 - バックエンドのテストは DB なしで通ります（ヘルスチェックの WebMvcTest は DB を差し替え。DB が必要なテストは環境変数 `SPRING_DATASOURCE_PASSWORD` がないと飛ばされます）。DB を使う確認は手順 4〜5 と、下記「DB を使うテストの実行」で行います。
-- Spring Security は入れていますが、ログイン機能は未実装です。`/api/health`・トップ・静的ファイル以外は認証が必要（401）です。
+- ログインAPIと権限制御があります（下記「ログインと権限制御」）。`/api/health`・ログインAPI・トップ・静的ファイル以外は、ログインしていないと 401 です。
 - Spring Session（JDBC）のテーブルは `spring.session.jdbc.initialize-schema=always` で起動時に作成されます。業務テーブルは下記「業務用テーブル」のとおり `schema.sql` で作成します（セッション用テーブルとは独立）。
 
 ## 業務用テーブル
@@ -159,3 +160,86 @@ cd backend
 - 文字数は文字（コードポイント）数で数えます（サロゲートペアは1文字）。
 - 値は補正しません。全角数字・前後の空白・改行を含む値は「数字のみ」「半角英数」ルールでは不正（`INVALID_FORMAT`）、文字数ルールでは1文字として数えます。
 - 数字のみの項目で先頭 0 は許容します（例: `00001` は数量1として有効）。
+
+## ログインと権限制御（FR-01-a）
+
+ログイン状態は HTTP セッションで持ち、セッションは Spring Session JDBC で DB（`spring_session` テーブル）に保存します。本人確認は `app_user` の登録内容と BCrypt ハッシュの一致で行い、パスワードの平文は保存・出力・ログ出力しません。画面（React 側）とユーザーの登録・更新・削除 API は別イシューです。
+
+### 権限
+
+| DB の値（`app_user.role`） | `Role` | Spring Security の権限 | 入れる範囲 |
+| --- | --- | --- | --- |
+| 管理者 | `ADMIN` | `ROLE_ADMIN` | すべての API（`/api/admin/**` を含む） |
+| 一般 | `GENERAL` | `ROLE_GENERAL` | `/api/admin/**` 以外のログイン後の API |
+
+DB の日本語値から `Role` への変換は `Role.fromLabel("管理者")`、権限名は `Role.authority()` です。
+
+アクセス制御:
+
+- 認証なしで使える: `/api/health`、`POST /api/auth/login`、トップ・静的ファイル
+- それ以外の `/api/**` は未ログインだと 401
+- `/api/admin/**` は管理者のみ。一般ユーザーは 403（未ログインは 401）
+
+### API（JSON）
+
+| メソッド・パス | 内容 |
+| --- | --- |
+| `POST /api/auth/login` | ログイン |
+| `POST /api/auth/logout` | ログアウト（セッションを破棄） |
+| `GET /api/auth/me` | 現在のログイン者の取得 |
+
+ログイン要求（`Content-Type: application/json`。ユーザーIDは半角英数4文字、パスワードは8〜14文字で、どちらも必須。値は補正しません）:
+
+```
+{ "userId": "A001", "password": "（入力値）" }
+```
+
+成功（200）とログイン者の取得（`GET /api/auth/me`、200）は同じ形です。`role` は定数名（`ADMIN` / `GENERAL`）、`roleLabel` は表示名です。セッションの Cookie（`SESSION`、HttpOnly・SameSite=Lax）が返ります。
+
+```
+{ "userId": "A001", "userName": "管理者", "role": "ADMIN", "roleLabel": "管理者" }
+```
+
+エラー:
+
+| 状況 | ステータス | 本文 |
+| --- | --- | --- |
+| 入力検証エラー（未入力・形式・文字数。複数項目をまとめて返す。本文なしも同じ） | 400 | `{ "errors": [ { "field": "userId", "type": "INVALID_FORMAT" }, { "field": "password", "type": "REQUIRED" } ] }`（`type` は `REQUIRED` / `INVALID_FORMAT` / `INVALID_LENGTH`） |
+| ユーザーIDまたはパスワードの不一致（ID が存在しない場合も同じ応答） | 401 | `{ "error": "AUTHENTICATION_FAILED" }` |
+| 未ログインで保護された API を呼んだ | 401 | 本文なし |
+| 権限不足（一般ユーザーが `/api/admin/**`） | 403 | （標準のエラー本文） |
+| CSRF トークンなし・不一致の POST など | 403 | （標準のエラー本文） |
+
+ログイン成功時、既存のセッションがあればセッションIDを変更します（セッション固定化攻撃対策）。ログアウトは成功時に 204 を返し、未ログインでも 204 です。
+
+### CSRF 対策（Cookie 方式）
+
+CSRF 保護は有効のままです（ログインAPIも対象）。方式は `CookieCsrfTokenRepository.withHttpOnlyFalse()` ＋ SPA 向けの `CsrfTokenRequestAttributeHandler`（BREACH 対策の XOR は使わず、Cookie の値をそのまま使う）です。Spring Security 7 ではトークンが遅延読み込みで、使うまで Cookie が書かれないため、`CsrfCookieFilter` で毎リクエスト読み込み、GET を含むすべての応答で `XSRF-TOKEN` Cookie を返します。
+
+画面側の使い方:
+
+1. 最初に任意の GET（例: `GET /api/health`）を呼ぶ。応答の `XSRF-TOKEN` Cookie（JavaScript から読める）にトークンが入る。
+2. POST・PUT・DELETE などの変更系リクエストでは、その Cookie の値を `X-XSRF-TOKEN` ヘッダーに載せる（`fetch` では `credentials: "same-origin"` で Cookie も送る）。
+3. ログアウトの直後は `XSRF-TOKEN` Cookie が消えるため、次に変更系リクエストを送る前に、もう一度 GET を呼んで Cookie を得る。
+
+```
+# curl での例（Cookie ファイルに保存して使う）
+curl -c jar.txt -b jar.txt http://localhost:8080/api/health
+curl -c jar.txt -b jar.txt -H "X-XSRF-TOKEN: <jar.txt の XSRF-TOKEN の値>" -H "Content-Type: application/json" \
+  -d '{"userId":"A001","password":"（入力値）"}' http://localhost:8080/api/auth/login
+curl -c jar.txt -b jar.txt http://localhost:8080/api/auth/me
+```
+
+### 最初の管理者
+
+ユーザー登録 API はまだないため、環境変数 `MONY_BOOTSTRAP_ADMIN_PASSWORD` が設定されていて、かつ `app_user` が 0 件のときだけ、起動時にユーザーID `A001`・氏名「管理者」・権限 管理者 を BCrypt ハッシュで登録します。ユーザーが 1 件でもいれば何もしません。値は 8〜14 文字（入力ルールのパスワードと同じ）で、外れていると登録せず警告のみをログに出します。パスワードの値はログにも出しません。値はファイルに書かず、環境変数で渡してください。
+
+```
+# bash（Git Bash 等。値は各自で決める）
+export MONY_BOOTSTRAP_ADMIN_PASSWORD='（8〜14文字の値）'
+./mvnw spring-boot:run
+```
+
+### テスト
+
+DB なしでは、ログイン・検証エラー・未ログイン 401・権限 403・ログアウト・CSRF などを WebMvcTest（`AuthControllerTest`）で、初期管理者の登録条件を単体テスト（`AdminBootstrapTest`）で確かめます。DB が必要な `AuthIntegrationTest`（セッションの `spring_session` 保存・ログアウトでの削除・セッションID変更など）と `AdminBootstrapIntegrationTest` は、環境変数 `SPRING_DATASOURCE_PASSWORD` があるときだけ実行されます。管理者用 API の確認に使うエンドポイントは `src/test` にあるテスト専用のもので、本番コードにはありません。
