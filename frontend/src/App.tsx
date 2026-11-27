@@ -8,6 +8,7 @@ import Login from './pages/Login'
 import Menu from './pages/Menu'
 import Placeholder from './pages/Placeholder'
 import ProductAdmin from './pages/ProductAdmin'
+import UserAdmin from './pages/UserAdmin'
 import { ADMIN_SCREENS, BUSINESS_SCREENS } from './screens'
 import type { ScreenDef } from './screens'
 
@@ -15,6 +16,7 @@ import type { ScreenDef } from './screens'
 const IMPLEMENTED_PAGES: Record<string, ReactElement> = {
   '/product-admin': <ProductAdmin />,
   '/location-admin': <LocationAdmin />,
+  '/user-admin': <UserAdmin />,
 }
 
 const pageOf = (s: ScreenDef) => IMPLEMENTED_PAGES[s.path] ?? <Placeholder screen={s} />

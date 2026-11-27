@@ -31,8 +31,9 @@ export const fieldLabels: Record<string, string> = {
   shelfNo: '棚番',
   productCode: '商品コード',
   productName: '商品名',
-  userName: 'ユーザー名',
+  userName: '氏名',
   userId: 'ユーザーID',
+  role: '権限',
   'password': 'パスワード',
   remarks: '備考',
   reason: '理由',
@@ -95,4 +96,20 @@ export const locationMessages = {
   /** 棚状況の検証エラー文（棚状況は選択式）。 */
   shelfStatus: (type: string): string =>
     type === 'REQUIRED' ? errorMessages.select('棚状況') : '棚状況の形式を確認して入力してください。',
+} as const
+
+/** ユーザー管理画面（S10）のメッセージ。 */
+export const userMessages = {
+  /** 更新・削除の対象が他の人に先に削除されていた（404）。 */
+  notFound: '選択されたユーザーは存在しません。',
+  /** ユーザーIDの重複（409 DUPLICATE）。 */
+  duplicate: 'そのユーザーIDは既に登録されています。別のユーザーIDを入力してください。',
+  /** ログイン中の本人の削除（409 SELF）。 */
+  self: 'ログイン中のユーザーは削除できません。',
+  /** 最後の管理者の削除・一般への変更（409 LAST_ADMIN）。 */
+  lastAdmin: '最後の管理者は削除できません。また、一般に変更することもできません。',
+  /** 実績の履歴があるユーザーの削除（409 HAS_RESULTS）。 */
+  hasResults: '実績のあるユーザーは削除できません。',
+  loadFailed: 'ユーザーの一覧を取得できませんでした。',
+  failed: '処理できませんでした。',
 } as const
