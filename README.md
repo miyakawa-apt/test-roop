@@ -88,3 +88,42 @@ docker compose down
 | Vitest / Testing Library | 5.1.2 / 16.3.3 | `npm test` 1件成功 |
 
 動作確認の結果: バックエンドを DB に接続して起動し、`GET /api/health` が 200（`database: UP`）を返しました。DB 停止中は 503（`database: DOWN`）を返し、認証が必要なパスは 401 でした。
+
+## 区分値と入力ルール（DT-01）
+
+バックエンドの検証部品です（`jp.co.apt.mony.common.code`／`jp.co.apt.mony.common.validation`。純Javaで依存追加なし）。フロントエンドでも同じ範囲を使ってください。
+
+### 区分値（表示名）
+
+| 区分 | 定数名 : 表示名 |
+| --- | --- |
+| 権限（`Role`） | `ADMIN` : 管理者 / `GENERAL` : 一般 |
+| 棚状況（`ShelfStatus`） | `EMPTY` : 空棚 / `STOCKED` : 実棚 / `PROHIBITED` : 禁止棚 |
+| 実績区分（`ResultType`） | `RECEIPT` : 入庫 / `ISSUE` : 出庫 / `CORRECTION` : 修正 / `DELETION` : 削除 |
+| カテゴリ（`Category`） | `FOOD` : 食品 / `DAILY_GOODS` : 日用品 / `TOOL` : 工具 / `PARTS` : 部材 / `OTHER` : その他 |
+
+`fromName("定数名")` で文字列から変換します（不正値・null は `IllegalArgumentException`）。
+
+### 入力ルール一覧（`InputRule`）
+
+| 項目 | 項目名（識別子） | ルール |
+| --- | --- | --- |
+| 数量（入庫・出庫・修正後） | `quantity` | 数字のみ 1〜99,999 |
+| 単価 | `unitPrice` | 数字のみ 0〜9,999,999 |
+| ケース入数 | `caseQuantity` | 数字のみ 1〜9,999 |
+| 棚番 | `shelfNo` | `NN-NNN-NN`（2桁-3桁-2桁、数字のみ） |
+| 商品コード | `productCode` | 数字のみ 8桁 |
+| 商品名 | `productName` | 1〜30文字 |
+| ユーザー名 | `userName` | 1〜15文字 |
+| ユーザーID | `userId` | 半角英数 4文字 |
+| パスワード | `password` | 8〜14文字 |
+| 備考 | `remarks` | 0〜50文字（空・null可） |
+| 理由 | `reason` | 1〜50文字 |
+
+エラー種別（`ErrorType`）は `REQUIRED`（未入力）／`INVALID_FORMAT`（形式不正）／`OUT_OF_RANGE`（数値の範囲外）／`INVALID_LENGTH`（文字数の範囲外）で、`ValidationResult` が項目名と種別を複数件まとめて保持します（文言は後続の共通UI要件で決定）。
+
+判断事項:
+
+- 文字数は文字（コードポイント）数で数えます（サロゲートペアは1文字）。
+- 値は補正しません。全角数字・前後の空白・改行を含む値は「数字のみ」「半角英数」ルールでは不正（`INVALID_FORMAT`）、文字数ルールでは1文字として数えます。
+- 数字のみの項目で先頭 0 は許容します（例: `00001` は数量1として有効）。
