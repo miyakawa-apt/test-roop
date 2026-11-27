@@ -1,0 +1,22 @@
+# 開発用 PostgreSQL。値は開発用のダミーで、環境変数で上書きできる。
+# 起動: docker compose up -d --wait / 停止: docker compose down
+name: mony
+services:
+  db:
+    image: postgres:17
+    container_name: mony-db
+    environment:
+      POSTGRES_DB: ${MONY_DB_NAME:-mony}
+      POSTGRES_USER: ${MONY_DB_USER:-mony}
+      POSTGRES_PASSWORD: ${MONY_DB_PASSWORD:-mony_dev_password}
+    ports:
+      - "${MONY_DB_PORT:-5432}:5432"
+    volumes:
+      - mony-db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+volumes:
+  mony-db-data:
