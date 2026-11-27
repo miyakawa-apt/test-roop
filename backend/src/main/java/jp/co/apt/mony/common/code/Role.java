@@ -1,7 +1,7 @@
 package jp.co.apt.mony.common.code;
 
 /** 権限。 */
-public enum Role {
+public enum Role implements Labeled {
 
 	ADMIN("管理者"),
 	GENERAL("一般");
@@ -13,6 +13,7 @@ public enum Role {
 	}
 
 	/** 画面表示名。 */
+	@Override
 	public String label() {
 		return label;
 	}

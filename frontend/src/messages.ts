@@ -36,14 +36,18 @@ export const fieldLabels: Record<string, string> = {
   'password': 'パスワード',
   remarks: '備考',
   reason: '理由',
+  category: 'カテゴリ',
 }
+
+/** 選択式の項目（未入力のとき「〜を選択してください。」にする）。 */
+const SELECT_FIELDS: ReadonlySet<string> = new Set(['category'])
 
 /** 検証結果（項目名＋エラー種別）から「〜してください。」形のエラー文を作る。 */
 export function validationMessage(field: string, type: string): string {
   const name = fieldLabels[field] ?? field
   switch (type) {
     case 'REQUIRED':
-      return `${name}を入力してください。`
+      return SELECT_FIELDS.has(field) ? errorMessages.select(name) : `${name}を入力してください。`
     case 'INVALID_FORMAT':
       return `${name}の形式を確認して入力してください。`
     case 'OUT_OF_RANGE':
@@ -63,3 +67,15 @@ export const loginMessages = {
 
 /** 検索結果が0件のとき: 「該当する〇〇がありません。」 */
 export const notFoundMessage = (name: string): string => `該当する${name}がありません。`
+
+/** 商品メンテナンス画面（S08）のメッセージ。 */
+export const productMessages = {
+  /** 更新・削除の対象が他の人に先に削除されていた（404）。 */
+  notFound: '選択された商品は存在しません。',
+  /** 商品コードの重複（409 DUPLICATE）。 */
+  duplicate: 'その商品コードは既に登録されています。別の商品コードを入力してください。',
+  /** 在庫のある商品の削除（409 HAS_STOCK）。 */
+  hasStock: '在庫のある商品は削除できません。',
+  loadFailed: '商品の一覧を取得できませんでした。',
+  failed: '処理できませんでした。',
+} as const

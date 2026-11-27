@@ -19,4 +19,17 @@ final class CodeSupport {
 		throw new IllegalArgumentException(type.getSimpleName() + " の不正な値です: " + value);
 	}
 
+	/** 表示名（DB の日本語値。完全一致）から変換する。不正値・null は IllegalArgumentException。 */
+	static <E extends Enum<E> & Labeled> E parseLabel(Class<E> type, String value) {
+		if (value == null) {
+			throw new IllegalArgumentException(type.getSimpleName() + " に null は指定できません");
+		}
+		for (E constant : type.getEnumConstants()) {
+			if (constant.label().equals(value)) {
+				return constant;
+			}
+		}
+		throw new IllegalArgumentException(type.getSimpleName() + " の不正な値です: " + value);
+	}
+
 }
