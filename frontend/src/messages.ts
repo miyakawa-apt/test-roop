@@ -23,5 +23,43 @@ export const resultMessages = {
   deleted: '削除済みです。',
 } as const
 
+/** 入力項目名（規則名）→ 画面に出す表示名。 */
+export const fieldLabels: Record<string, string> = {
+  quantity: '数量',
+  unitPrice: '単価',
+  caseQuantity: 'ケース入数',
+  shelfNo: '棚番',
+  productCode: '商品コード',
+  productName: '商品名',
+  userName: 'ユーザー名',
+  userId: 'ユーザーID',
+  'password': 'パスワード',
+  remarks: '備考',
+  reason: '理由',
+}
+
+/** 検証結果（項目名＋エラー種別）から「〜してください。」形のエラー文を作る。 */
+export function validationMessage(field: string, type: string): string {
+  const name = fieldLabels[field] ?? field
+  switch (type) {
+    case 'REQUIRED':
+      return `${name}を入力してください。`
+    case 'INVALID_FORMAT':
+      return `${name}の形式を確認して入力してください。`
+    case 'OUT_OF_RANGE':
+      return `${name}の範囲を確認して入力してください。`
+    case 'INVALID_LENGTH':
+      return `${name}の文字数を確認して入力してください。`
+    default:
+      return `${name}を確認して入力してください。`
+  }
+}
+
+/** ログイン画面のメッセージ。 */
+export const loginMessages = {
+  mismatch: 'ユーザーIDまたはパスワードが違います。確認して入力してください。',
+  failed: 'ログインできませんでした。',
+} as const
+
 /** 検索結果が0件のとき: 「該当する〇〇がありません。」 */
 export const notFoundMessage = (name: string): string => `該当する${name}がありません。`

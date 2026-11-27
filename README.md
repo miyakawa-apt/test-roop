@@ -298,3 +298,68 @@ result.typesOf('quantity')  // ['INVALID_FORMAT']
 | `useSubmitValidation(validate, onValid)` | 入力チェックは Enter キーとボタン押下のときだけ。blur では検証しない（blur 用のハンドラは提供しない）。IME の変換確定 Enter（isComposing / keyCode 229）では検証せず、textarea の Enter（改行）は潰さない。`{ errors, submit, onEnterKey, clearErrors }` を返し、`submit` をボタンに、`onEnterKey` を入力欄の `onKeyDown` に渡す。 |
 
 メッセージ文面は `messages.ts` に集約し、分類ごとに文末を揃えます。要件の2形式（「〜です。」「〜してください。」）は通知文・エラー文の書き方で、結果通知は「登録済みです。」のような「〜です。」（`resultMessages`・`notFoundMessage`）、エラーは「〜してください。」（`errorMessages`）にしました。確認はダイアログの問いかけなので、疑問形「〜します。よろしいですか？」のままにしています（`confirmMessages`）。
+
+## ログイン画面・メニュー画面・共通ヘッダー（FR-01-b・UI-01）
+
+### 画面一覧とルート
+
+| 画面 | ルート | 内容 | 入れる権限 |
+| --- | --- | --- | --- |
+| S01 ログイン | `/login` | ユーザーID・パスワード（伏せ字）。検証は Enter キー・ボタン押下のときだけ | 誰でも（ログイン済みなら `/menu` へ） |
+| S02 メニュー | `/menu`（`/` も `/menu` へ） | ログイン者を「ID : A001 (管理者)」形式で表示。ログイン／ログアウトは1つのボタンで兼用 | 誰でも |
+| S03 入庫 | `/stock-in` | 仮ページ（「準備中です。」） | 管理者・一般 |
+| S04 出庫 | `/stock-out` | 仮ページ | 管理者・一般 |
+| S05 在庫リスト | `/stock-list` | 仮ページ | 管理者・一般 |
+| S06 実績照会 | `/results` | 仮ページ | 管理者・一般 |
+| S07 在庫修正 | `/stock-edit` | 仮ページ | 管理者のみ |
+| S08 商品メンテナンス | `/product-admin` | 仮ページ | 管理者のみ |
+| S09 ロケーションメンテ | `/location-admin` | 仮ページ | 管理者のみ |
+| S10 ユーザー管理 | `/user-admin` | 仮ページ | 管理者のみ |
+
+全画面の上に共通ヘッダー（ログイン者「A001（管理者）」または「未ログイン」と、現在日時 `yyyy年MM月dd日 HH:mm:ss`。1秒ごとに更新）を出します。画面の定義は `frontend/src/screens.ts` です。
+
+### 権限表（メニューの押せる／押せない）とガード
+
+| 状態 | 業務メニュー（S03〜S06） | 管理者メニュー（S07〜S10） | ボタン |
+| --- | --- | --- | --- |
+| 未ログイン | 押せない（disabled） | 押せない | ログイン（S01 へ） |
+| 一般 | 押せる | 押せない | ログアウト |
+| 管理者 | 押せる | 押せる | ログアウト |
+
+- ログアウトは `POST /api/auth/logout` のあと、`/menu` に留まったまま未ログイン状態になる。
+- 未ログインで S03〜S10 を直接開くと `/login` へ。一般が S07〜S10 を直接開くと `/menu` へ戻す（メッセージは出さない）。未定義のパスは `/menu` へ。
+- 起動時・再読み込み後は `GET /api/auth/me` でログイン状態を復元する。復元中は何も描画しない。
+- パスワードは送信後に state から消し、`localStorage` / `sessionStorage` などには保存しない。不一致（401）はエラーダイアログを出し、パスワードだけクリアする。
+
+### ログイン状態（`useAuth`）
+
+`App` が `AuthProvider` を持つので、画面側は `useAuth()` で使います（`frontend/src/auth/AuthContext.tsx`）。
+
+```ts
+const { user, loading, login, logout } = useAuth()
+// user: { userId, userName, role: 'ADMIN' | 'GENERAL', roleLabel } | null（未ログイン）
+// loading: 起動時の復元中は true
+const result = await login('A001', 入力値) // { type: 'success' | 'invalid' | 'mismatch' | 'error', ... }
+await logout()
+```
+
+ルートの権限ガードは `auth/RequireAuth.tsx`（`<RequireAuth adminOnly />` の下に Route を並べる）です。
+
+### API クライアント（`frontend/src/api/`）
+
+```ts
+import { apiGet, apiPost, apiSend } from './api/client'
+
+const res = await apiGet<Product[]>('/api/products')   // { status, ok, body }
+const r2 = await apiPost('/api/auth/login', { userId, password })
+await apiSend('PUT', '/api/xxx/1', { ... })             // POST / PUT / DELETE
+```
+
+- `fetch` を `credentials: 'same-origin'`（SESSION Cookie を送る）で呼び、JSON を読み書きする。
+- 変更系（POST・PUT・DELETE）は `XSRF-TOKEN` Cookie を読んで `X-XSRF-TOKEN` ヘッダーを自動で付ける。Cookie が無いとき（初回・ログアウト直後）は先に `GET /api/health` で取得する。
+- HTTP エラー（400・401 など）は例外にせず `status` と `body` で返す。通信失敗だけが例外になる。
+- ログイン関連は `api/auth.ts`（`fetchMe` / `postLogin` / `postLogout`）。
+
+### 共通メッセージ（`messages.ts`）
+
+`validationMessage(項目名, エラー種別)` が検証結果から「〜してください。」形の文面を作ります（例: `userId` ＋ `REQUIRED` →「ユーザーIDを入力してください。」）。項目の表示名は `fieldLabels`、ログイン不一致の文言は `loginMessages.mismatch` です。
