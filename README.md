@@ -282,3 +282,19 @@ result.typesOf('quantity')  // ['INVALID_FORMAT']
 | 理由 | `reason` | 1〜50文字 | REQUIRED / INVALID_LENGTH |
 
 数字のみの項目は先頭 0 を許容し（`00001` は有効）、18桁を超える数字は範囲外です。区分値の表示名（権限・棚状況・実績区分・カテゴリ）もサーバー側の定数名・表示名と同じです。判定はサーバー側 `InputRuleTest` のケースに揃えたテスト（`validation/inputRules.test.ts`、`codes.test.ts`）で確認します。
+
+## 画面の共通部品（UI-02）
+
+`frontend/src/components/` と `frontend/src/messages.ts` にあります。業務画面から次のように使います。
+
+| 部品 | 使い方 |
+| --- | --- |
+| `ConfirmDialog` | `<ConfirmDialog message={confirmMessages.register} onYes={…} onNo={…} />`。登録・更新・削除の前に条件付きで描画する。Enter=はい、Esc=いいえ、既定フォーカスは「はい」。キーは document で受けるので、フォーカスが外れても効く（押しっぱなしは無視）。 |
+| `ErrorDialog` | `<ErrorDialog messages={string[]} onClose={…} />`。複数エラーをまとめて表示。Enter か Esc で閉じる（`role="alertdialog"`）。 |
+| `NoticeProvider` / `useNotice()` | 表示中の画面（ページ）の中に `NoticeProvider` を置き、`const { show, clear } = useNotice()`。`show(resultMessages.registered)` で画面下に緑の帯を出し、7.5秒で消える（表示中に再度呼ぶと置き換えて数え直す）。画面遷移で Provider が外れれば消える。遷移前に消したいときは `clear()`。 |
+| `NotFound` | `<NotFound name="商品" />` →「該当する商品がありません。」（文面は `notFoundMessage(name)`） |
+| `CountLabel` | `<CountLabel count={n} />` → 一覧右上に「N件」 |
+| `TextInput` | `maxLength`（最大文字数）が必須の props。付け忘れると型エラーになる。`maxLength` は UTF-16 のコード単位で数えるため、サロゲートペア文字（一部の絵文字・異体字）は 1 文字が 2 と数えられる。 |
+| `useSubmitValidation(validate, onValid)` | 入力チェックは Enter キーとボタン押下のときだけ。blur では検証しない（blur 用のハンドラは提供しない）。IME の変換確定 Enter（isComposing / keyCode 229）では検証せず、textarea の Enter（改行）は潰さない。`{ errors, submit, onEnterKey, clearErrors }` を返し、`submit` をボタンに、`onEnterKey` を入力欄の `onKeyDown` に渡す。 |
+
+メッセージ文面は `messages.ts` に集約し、分類ごとに文末を揃えます。要件の2形式（「〜です。」「〜してください。」）は通知文・エラー文の書き方で、結果通知は「登録済みです。」のような「〜です。」（`resultMessages`・`notFoundMessage`）、エラーは「〜してください。」（`errorMessages`）にしました。確認はダイアログの問いかけなので、疑問形「〜します。よろしいですか？」のままにしています（`confirmMessages`）。
