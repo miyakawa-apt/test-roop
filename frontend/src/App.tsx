@@ -7,12 +7,14 @@ import Login from './pages/Login'
 import Menu from './pages/Menu'
 import Placeholder from './pages/Placeholder'
 import ProductAdmin from './pages/ProductAdmin'
+import UserAdmin from './pages/UserAdmin'
 import { ADMIN_SCREENS, BUSINESS_SCREENS } from './screens'
 import type { ScreenDef } from './screens'
 
 /** 実装済みの画面（パス → 画面）。ここに無いパスは仮ページ（Placeholder）を出す。 */
 const IMPLEMENTED_PAGES: Record<string, ReactElement> = {
   '/product-admin': <ProductAdmin />,
+  '/user-admin': <UserAdmin />,
 }
 
 const pageOf = (s: ScreenDef) => IMPLEMENTED_PAGES[s.path] ?? <Placeholder screen={s} />
