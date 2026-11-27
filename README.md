@@ -243,3 +243,19 @@ export MONY_BOOTSTRAP_ADMIN_PASSWORD='（8〜14文字の値）'
 ### テスト
 
 DB なしでは、ログイン・検証エラー・未ログイン 401・権限 403・ログアウト・CSRF などを WebMvcTest（`AuthControllerTest`）で、初期管理者の登録条件を単体テスト（`AdminBootstrapTest`）で確かめます。DB が必要な `AuthIntegrationTest`（セッションの `spring_session` 保存・ログアウトでの削除・セッションID変更など）と `AdminBootstrapIntegrationTest` は、環境変数 `SPRING_DATASOURCE_PASSWORD` があるときだけ実行されます。管理者用 API の確認に使うエンドポイントは `src/test` にあるテスト専用のもので、本番コードにはありません。
+
+## 画面の共通部品（UI-02）
+
+`frontend/src/components/` と `frontend/src/messages.ts` にあります。業務画面から次のように使います。
+
+| 部品 | 使い方 |
+| --- | --- |
+| `ConfirmDialog` | `<ConfirmDialog message={confirmMessages.register} onYes={…} onNo={…} />`。登録・更新・削除の前に条件付きで描画する。Enter=はい、Esc=いいえ、既定フォーカスは「はい」。 |
+| `ErrorDialog` | `<ErrorDialog messages={string[]} onClose={…} />`。複数エラーをまとめて表示。Enter か Esc で閉じる。 |
+| `NoticeProvider` / `useNotice()` | 表示中の画面（ページ）の中に `NoticeProvider` を置き、`const { show, clear } = useNotice()`。`show(resultMessages.registered)` で画面下に緑の帯を出し、7.5秒で消える（表示中に再度呼ぶと置き換えて数え直す）。画面遷移で Provider が外れれば消える。遷移前に消したいときは `clear()`。 |
+| `NotFound` | `<NotFound name="商品" />` →「該当する商品がありません。」（文面は `notFoundMessage(name)`） |
+| `CountLabel` | `<CountLabel count={n} />` → 一覧右上に「N件」 |
+| `TextInput` | `maxLength`（最大文字数）が必須の props。付け忘れると型エラーになる。 |
+| `useSubmitValidation(validate, onValid)` | 入力チェックは Enter キーとボタン押下のときだけ。blur では検証しない（blur 用のハンドラは提供しない）。`{ errors, submit, onEnterKey, clearErrors }` を返し、`submit` をボタンに、`onEnterKey` を入力欄の `onKeyDown` に渡す。 |
+
+メッセージ文面は `messages.ts` に集約し、分類ごとに文末を揃えます。確認は疑問形「〜よろしいですか？」（`confirmMessages`）、エラーは「〜してください。」（`errorMessages`）、完了・結果通知は「〜しました。」「〜がありません。」の言い切り（`resultMessages`・`notFoundMessage`）です。要件の2形式（〜です。／〜してください。）に確認の疑問形を加えた3分類にしました。
