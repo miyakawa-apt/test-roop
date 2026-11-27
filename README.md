@@ -243,3 +243,42 @@ export MONY_BOOTSTRAP_ADMIN_PASSWORD='（8〜14文字の値）'
 ### テスト
 
 DB なしでは、ログイン・検証エラー・未ログイン 401・権限 403・ログアウト・CSRF などを WebMvcTest（`AuthControllerTest`）で、初期管理者の登録条件を単体テスト（`AdminBootstrapTest`）で確かめます。DB が必要な `AuthIntegrationTest`（セッションの `spring_session` 保存・ログアウトでの削除・セッションID変更など）と `AdminBootstrapIntegrationTest` は、環境変数 `SPRING_DATASOURCE_PASSWORD` があるときだけ実行されます。管理者用 API の確認に使うエンドポイントは `src/test` にあるテスト専用のもので、本番コードにはありません。
+
+## 画面側の入力ルール検証（DT-01・フロントエンド）
+
+`frontend/src/validation/`（`inputRules.ts`）と `frontend/src/codes.ts` です。サーバー側（`InputRule` など）と同じ項目名・範囲・エラー種別で、文言は持ちません（共通UI部品が項目名とエラー種別から組み立てます）。値は補正せず（全角→半角・空白除去なし）、文字数はコードポイント数で数えます。
+
+```ts
+import { validateForm, validateValue, checkRule } from './validation'
+
+checkRule('quantity', '0')            // 'OUT_OF_RANGE'（問題なければ undefined）
+validateValue('shelfNo', '01-001-01').isValid()  // true
+const result = validateForm({ quantity: '０', productCode: '', remarks: 'メモ' })
+result.errors()   // [{ field: 'quantity', type: 'INVALID_FORMAT' }, { field: 'productCode', type: 'REQUIRED' }]
+result.typesOf('quantity')  // ['INVALID_FORMAT']
+```
+
+- `checkRule(規則名, 値)` : エラー種別（`REQUIRED` / `INVALID_FORMAT` / `OUT_OF_RANGE` / `INVALID_LENGTH`）か `undefined`。`null`・`undefined` は空として扱う
+- `validateValue(規則名, 値)` : 単独の値を検証して `ValidationResult` を返す
+- `validateRule(result, 規則名, 値, 項目名?)` : 既存の `result` に追加（項目名を省略すると既定の項目名。同じ規則を別の項目名で使えます）
+- `validateForm({ 規則名: 値, ... })` : 複数項目をまとめて検証（キーが項目名）
+- `ValidationResult` : `isValid()` / `errors()`（`{ field, type }` の配列）/ `typesOf(項目名)`
+- `INPUT_RULES` : 規則の定義（範囲・形式）。区分値は `codes.ts` の `*_LABELS`（定数名→表示名）、`*_OPTIONS`（選択肢）、`isRole` 等（定数名の判定）
+
+### サーバー側との一致一覧
+
+| 項目 | 規則名（項目名） | 画面側の範囲（サーバー側と同じ） | エラー種別 |
+| --- | --- | --- | --- |
+| 数量 | `quantity` | 数字のみ 1〜99,999 | REQUIRED / INVALID_FORMAT / OUT_OF_RANGE |
+| 単価 | `unitPrice` | 数字のみ 0〜9,999,999 | 同上 |
+| ケース入数 | `caseQuantity` | 数字のみ 1〜9,999 | 同上 |
+| 棚番 | `shelfNo` | `NN-NNN-NN`（数字のみ） | REQUIRED / INVALID_FORMAT |
+| 商品コード | `productCode` | 数字のみ 8桁 | 同上 |
+| 商品名 | `productName` | 1〜30文字 | REQUIRED / INVALID_LENGTH |
+| ユーザー名 | `userName` | 1〜15文字 | 同上 |
+| ユーザーID | `userId` | 半角英数 4文字 | REQUIRED / INVALID_FORMAT |
+| パスワード | `password` | 8〜14文字 | REQUIRED / INVALID_LENGTH |
+| 備考 | `remarks` | 0〜50文字（空・null可） | INVALID_LENGTH |
+| 理由 | `reason` | 1〜50文字 | REQUIRED / INVALID_LENGTH |
+
+数字のみの項目は先頭 0 を許容し（`00001` は有効）、18桁を超える数字は範囲外です。区分値の表示名（権限・棚状況・実績区分・カテゴリ）もサーバー側の定数名・表示名と同じです。判定はサーバー側 `InputRuleTest` のケースに揃えたテスト（`validation/inputRules.test.ts`、`codes.test.ts`）で確認します。
