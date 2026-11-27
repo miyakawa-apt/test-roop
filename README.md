@@ -250,12 +250,12 @@ DB なしでは、ログイン・検証エラー・未ログイン 401・権限 
 
 | 部品 | 使い方 |
 | --- | --- |
-| `ConfirmDialog` | `<ConfirmDialog message={confirmMessages.register} onYes={…} onNo={…} />`。登録・更新・削除の前に条件付きで描画する。Enter=はい、Esc=いいえ、既定フォーカスは「はい」。 |
-| `ErrorDialog` | `<ErrorDialog messages={string[]} onClose={…} />`。複数エラーをまとめて表示。Enter か Esc で閉じる。 |
+| `ConfirmDialog` | `<ConfirmDialog message={confirmMessages.register} onYes={…} onNo={…} />`。登録・更新・削除の前に条件付きで描画する。Enter=はい、Esc=いいえ、既定フォーカスは「はい」。キーは document で受けるので、フォーカスが外れても効く（押しっぱなしは無視）。 |
+| `ErrorDialog` | `<ErrorDialog messages={string[]} onClose={…} />`。複数エラーをまとめて表示。Enter か Esc で閉じる（`role="alertdialog"`）。 |
 | `NoticeProvider` / `useNotice()` | 表示中の画面（ページ）の中に `NoticeProvider` を置き、`const { show, clear } = useNotice()`。`show(resultMessages.registered)` で画面下に緑の帯を出し、7.5秒で消える（表示中に再度呼ぶと置き換えて数え直す）。画面遷移で Provider が外れれば消える。遷移前に消したいときは `clear()`。 |
 | `NotFound` | `<NotFound name="商品" />` →「該当する商品がありません。」（文面は `notFoundMessage(name)`） |
 | `CountLabel` | `<CountLabel count={n} />` → 一覧右上に「N件」 |
-| `TextInput` | `maxLength`（最大文字数）が必須の props。付け忘れると型エラーになる。 |
-| `useSubmitValidation(validate, onValid)` | 入力チェックは Enter キーとボタン押下のときだけ。blur では検証しない（blur 用のハンドラは提供しない）。`{ errors, submit, onEnterKey, clearErrors }` を返し、`submit` をボタンに、`onEnterKey` を入力欄の `onKeyDown` に渡す。 |
+| `TextInput` | `maxLength`（最大文字数）が必須の props。付け忘れると型エラーになる。`maxLength` は UTF-16 のコード単位で数えるため、サロゲートペア文字（一部の絵文字・異体字）は 1 文字が 2 と数えられる。 |
+| `useSubmitValidation(validate, onValid)` | 入力チェックは Enter キーとボタン押下のときだけ。blur では検証しない（blur 用のハンドラは提供しない）。IME の変換確定 Enter（isComposing / keyCode 229）では検証せず、textarea の Enter（改行）は潰さない。`{ errors, submit, onEnterKey, clearErrors }` を返し、`submit` をボタンに、`onEnterKey` を入力欄の `onKeyDown` に渡す。 |
 
-メッセージ文面は `messages.ts` に集約し、分類ごとに文末を揃えます。確認は疑問形「〜よろしいですか？」（`confirmMessages`）、エラーは「〜してください。」（`errorMessages`）、完了・結果通知は「〜しました。」「〜がありません。」の言い切り（`resultMessages`・`notFoundMessage`）です。要件の2形式（〜です。／〜してください。）に確認の疑問形を加えた3分類にしました。
+メッセージ文面は `messages.ts` に集約し、分類ごとに文末を揃えます。要件の2形式（「〜です。」「〜してください。」）は通知文・エラー文の書き方で、結果通知は「登録済みです。」のような「〜です。」（`resultMessages`・`notFoundMessage`）、エラーは「〜してください。」（`errorMessages`）にしました。確認はダイアログの問いかけなので、疑問形「〜します。よろしいですか？」のままにしています（`confirmMessages`）。

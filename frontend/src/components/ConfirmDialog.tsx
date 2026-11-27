@@ -8,14 +8,14 @@ type Props = {
 
 /** 確認ダイアログ（登録・更新・削除の前）。Enter=はい、Esc=いいえ。既定フォーカスは「はい」。 */
 export default function ConfirmDialog({ message, onYes, onNo }: Props) {
-  const { defaultRef, onKeyDown } = useDialogKeys(onYes, onNo)
+  const { defaultRef } = useDialogKeys(onYes, onNo)
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
       <div
         role="dialog"
         aria-modal="true"
-        aria-labelledby="confirm-dialog-message"
-        onKeyDown={onKeyDown}
+        aria-label="確認"
+        aria-describedby="confirm-dialog-message"
         className="w-96 rounded bg-white p-6 shadow-lg"
       >
         <p id="confirm-dialog-message" className="mb-6 text-slate-800">

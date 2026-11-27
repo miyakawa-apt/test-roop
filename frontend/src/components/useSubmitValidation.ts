@@ -19,11 +19,14 @@ export function useSubmitValidation(validate: () => string[], onValid: () => voi
     if (result.length === 0) onValid()
   }
   /** 入力欄の onKeyDown に渡す。Enter のときだけ検証する。 */
-  const onEnterKey = (e: KeyboardEvent) => {
-    if (e.key === 'Enter') {
-      e.preventDefault()
-      submit()
-    }
+  const onEnterKey = (e: KeyboardEvent<HTMLElement>) => {
+    if (e.key !== 'Enter') return
+    // IME の変換確定の Enter では検証しない
+    if (e.nativeEvent.isComposing || e.keyCode === 229) return
+    // textarea の Enter は改行なので潰さない（preventDefault は input のみ）
+    if (e.currentTarget instanceof HTMLTextAreaElement) return
+    e.preventDefault()
+    submit()
   }
   const clearErrors = () => setErrors([])
 

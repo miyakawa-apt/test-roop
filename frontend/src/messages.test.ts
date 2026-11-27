@@ -7,7 +7,7 @@ describe('messages', () => {
   })
   it('分類ごとに文末が揃っている', () => {
     Object.values(confirmMessages).forEach((m) => expect(m).toMatch(/よろしいですか？$/))
-    Object.values(resultMessages).forEach((m) => expect(m).toMatch(/ました。$/))
+    Object.values(resultMessages).forEach((m) => expect(m).toMatch(/済みです。$/))
     expect(errorMessages.required('商品名')).toBe('商品名を入力してください。')
     expect(errorMessages.maxLength('商品名', 20)).toMatch(/してください。$/)
   })

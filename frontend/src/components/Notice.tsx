@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react'
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 
 /** 完了メッセージを表示する時間（ミリ秒） */
@@ -41,14 +41,15 @@ export function NoticeProvider({ children }: { children: ReactNode }) {
     [stop],
   )
   useEffect(() => stop, [stop])
+  const api = useMemo(() => ({ show, clear }), [show, clear])
 
   return (
-    <NoticeContext.Provider value={{ show, clear }}>
+    <NoticeContext.Provider value={api}>
       {children}
       {message !== null && (
         <div
           role="status"
-          className="fixed inset-x-0 bottom-0 z-40 bg-green-600 px-4 py-3 text-center text-white"
+          className="fixed inset-x-0 bottom-0 z-40 bg-green-700 px-4 py-3 text-center text-white"
         >
           {message}
         </div>

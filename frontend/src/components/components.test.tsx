@@ -31,6 +31,24 @@ describe('ConfirmDialog', () => {
     fireEvent.keyDown(screen.getByRole('dialog'), { key: 'Escape' })
     expect(onNo).toHaveBeenCalledTimes(1)
   })
+  it('ダイアログ外にフォーカスがあっても Enter/Esc が効き、押しっぱなし(repeat)は無視する', () => {
+    const onYes = vi.fn()
+    const onNo = vi.fn()
+    render(<ConfirmDialog message="m" onYes={onYes} onNo={onNo} />)
+    fireEvent.keyDown(document.body, { key: 'Enter' })
+    fireEvent.keyDown(document.body, { key: 'Enter', repeat: true })
+    expect(onYes).toHaveBeenCalledTimes(1)
+    fireEvent.keyDown(document.body, { key: 'Escape' })
+    fireEvent.keyDown(document.body, { key: 'Escape', repeat: true })
+    expect(onNo).toHaveBeenCalledTimes(1)
+  })
+  it('閉じた（アンマウントした）後はキーに反応しない', () => {
+    const onYes = vi.fn()
+    const { unmount } = render(<ConfirmDialog message="m" onYes={onYes} onNo={vi.fn()} />)
+    unmount()
+    fireEvent.keyDown(document.body, { key: 'Enter' })
+    expect(onYes).not.toHaveBeenCalled()
+  })
   it('「いいえ」にフォーカスがあっても Enter は「はい」', () => {
     const onYes = vi.fn()
     render(<ConfirmDialog message="m" onYes={onYes} onNo={vi.fn()} />)
@@ -45,11 +63,14 @@ describe('ErrorDialog', () => {
     expect(screen.getAllByRole('listitem')).toHaveLength(2)
     expect(screen.getByText('B を選択してください。')).toBeInTheDocument()
   })
-  it('Enter でも Esc でも閉じる', () => {
+  it('Enter でも Esc でも閉じる（alertdialog、repeat は無視）', () => {
     const onClose = vi.fn()
     render(<ErrorDialog messages={['x']} onClose={onClose} />)
-    fireEvent.keyDown(screen.getByRole('dialog'), { key: 'Enter' })
-    fireEvent.keyDown(screen.getByRole('dialog'), { key: 'Escape' })
+    expect(screen.getByRole('alertdialog')).toBeInTheDocument()
+    fireEvent.keyDown(document.body, { key: 'Enter', repeat: true })
+    expect(onClose).not.toHaveBeenCalled()
+    fireEvent.keyDown(screen.getByRole('alertdialog'), { key: 'Enter' })
+    fireEvent.keyDown(screen.getByRole('alertdialog'), { key: 'Escape' })
     expect(onClose).toHaveBeenCalledTimes(2)
   })
 })
@@ -58,8 +79,8 @@ function NoticeDemo() {
   const { show, clear } = useNotice()
   return (
     <>
-      <button onClick={() => show('登録しました。')}>one</button>
-      <button onClick={() => show('更新しました。')}>two</button>
+      <button onClick={() => show('登録済みです。')}>one</button>
+      <button onClick={() => show('更新済みです。')}>two</button>
       <button onClick={clear}>clear</button>
     </>
   )
@@ -74,7 +95,7 @@ describe('Notice', () => {
       </NoticeProvider>,
     )
     fireEvent.click(screen.getByText('one'))
-    expect(screen.getByRole('status')).toHaveTextContent('登録しました。')
+    expect(screen.getByRole('status')).toHaveTextContent('登録済みです。')
     expect(screen.getByRole('status').className).toContain('bg-green')
     act(() => {
       vi.advanceTimersByTime(NOTICE_DURATION_MS - 1)
@@ -97,7 +118,7 @@ describe('Notice', () => {
       vi.advanceTimersByTime(5000)
     })
     fireEvent.click(screen.getByText('two'))
-    expect(screen.getByRole('status')).toHaveTextContent('更新しました。')
+    expect(screen.getByRole('status')).toHaveTextContent('更新済みです。')
     act(() => {
       vi.advanceTimersByTime(5000) // 最初から10秒だが、2通目からは5秒
     })
@@ -167,6 +188,27 @@ describe('TextInput / useSubmitValidation', () => {
     fireEvent.click(screen.getByText('登録'))
     expect(validate).toHaveBeenCalledTimes(2)
     expect(onValid).not.toHaveBeenCalled()
+  })
+  it('IME 変換確定の Enter（isComposing / keyCode 229）では検証せず、確定後の Enter では検証する', () => {
+    const validate = vi.fn(() => [])
+    render(<Form validate={validate} onValid={vi.fn()} />)
+    const input = screen.getByLabelText('名称')
+    fireEvent.keyDown(input, { key: 'Enter', isComposing: true })
+    fireEvent.keyDown(input, { key: 'Enter', keyCode: 229 })
+    expect(validate).not.toHaveBeenCalled()
+    fireEvent.keyDown(input, { key: 'Enter' })
+    expect(validate).toHaveBeenCalledTimes(1)
+  })
+  it('textarea の Enter は検証せず改行を潰さない', () => {
+    const validate = vi.fn(() => [])
+    function Area() {
+      const { onEnterKey } = useSubmitValidation(validate, vi.fn())
+      return <textarea aria-label="備考" onKeyDown={onEnterKey} />
+    }
+    render(<Area />)
+    const notPrevented = fireEvent.keyDown(screen.getByLabelText('備考'), { key: 'Enter' })
+    expect(notPrevented).toBe(true)
+    expect(validate).not.toHaveBeenCalled()
   })
   it('エラーが無ければ onValid を呼ぶ', () => {
     const onValid = vi.fn()
